@@ -1,0 +1,26 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# wasm-pack output. Generated on every build; the committed copy of the wasm
+# that Actions actually run lives in packages/action/dist/ instead.
+packages/analyzer/pkg/
+
+# Node
+node_modules/
+.pnpm-store/
+*.tsbuildinfo
+
+# Astro / Cloudflare
+.astro/
+.wrangler/
+apps/web/dist/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Test output
+**/*.snap.new
