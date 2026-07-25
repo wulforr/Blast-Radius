@@ -1,0 +1,28 @@
+[workspace]
+members = ["packages/analyzer"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+repository = "https://github.com/shauryasingh/blast-radius"
+
+[workspace.dependencies]
+oxc_allocator = "0.149.0"
+oxc_ast = "0.149.0"
+oxc_ast_visit = "0.149.0"
+oxc_parser = "0.149.0"
+oxc_span = "0.149.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+
+[profile.release]
+# The wasm artifact ships inside packages/action/dist and is committed, so its
+# size is a reviewable diff on every PR. Optimise for size, not speed.
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

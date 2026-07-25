@@ -1,0 +1,48 @@
+[package]
+name = "analyzer"
+description = "Import graph construction and reverse reachability for TypeScript and JavaScript projects."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# wasm-pack shells out to a pinned `wasm-opt` that does not enable the
+# post-MVP wasm features by default, while rustc 1.98 emits them
+# unconditionally. Without these flags the build dies with
+# `[wasm-validator error] Bulk memory operations require bulk memory`.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = [
+    "-O",
+    "--enable-bulk-memory",
+    "--enable-nontrapping-float-to-int",
+    "--enable-sign-ext",
+    "--enable-mutable-globals",
+    "--enable-reference-types",
+    "--enable-multivalue",
+]
+
+[lib]
+# cdylib for the wasm-pack build, rlib so `cargo test` and future native
+# consumers can link the same code.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# wasm-bindgen is only meaningful on the wasm target. Gating it here keeps
+# `cargo test` on the host free of the whole bindgen dependency tree, which is
+# what makes the analyzer testable in plain Rust.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2.128"
+console_error_panic_hook = "0.1.7"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+# The no-panic lints (`clippy::unwrap_used` and friends) are NOT declared here.
+# A `[lints]` table applies to every target in the package, including
+# `tests/`, where `expect()` and `value["key"]` are the correct way to write an
+# assertion. They are declared as inner attributes in `src/lib.rs` instead, so
+# they bind to the library crate only.
