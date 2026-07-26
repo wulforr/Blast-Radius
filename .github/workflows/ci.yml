@@ -1,0 +1,75 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  analyzer:
+    name: analyzer (rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # rust-toolchain.toml pins the channel, components and targets, so this
+      # step needs no version arguments — one source of truth for the toolchain.
+      - name: Install Rust
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test --all-features
+
+  wasm:
+    name: wasm artifact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: v0.15.0
+
+      - name: Build analyzer.wasm
+        working-directory: packages/analyzer
+        run: wasm-pack build --target nodejs --out-dir pkg --out-name analyzer --release
+
+      # `wasm-pack build` exiting zero only proves it compiled. This proves the
+      # module instantiates under Node and a value crosses the boundary.
+      - name: Smoke test the wasm module
+        run: node scripts/wasm-smoke.mjs
+
+      - name: Report artifact size
+        working-directory: packages/analyzer
+        run: ls -l pkg/analyzer_bg.wasm
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: analyzer-wasm
+          path: packages/analyzer/pkg/
+          if-no-files-found: error
