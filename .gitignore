@@ -24,3 +24,9 @@ apps/web/dist/
 
 # Test output
 **/*.snap.new
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# git worktrees for isolated feature work — never committed.
+/.worktrees/
