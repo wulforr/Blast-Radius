@@ -1,5 +1,5 @@
-use analyzer::fs::MemFs;
 use analyzer::discover::discover;
+use analyzer::fs::MemFs;
 
 fn fs() -> MemFs {
     MemFs::from([
@@ -60,5 +60,8 @@ fn output_is_sorted_and_deterministic() {
 
 #[test]
 fn can_be_scoped_to_a_subdirectory() {
-    assert_eq!(discover(&fs(), "src/deep"), vec!["src/deep/nested/thing.tsx"]);
+    assert_eq!(
+        discover(&fs(), "src/deep"),
+        vec!["src/deep/nested/thing.tsx"]
+    );
 }

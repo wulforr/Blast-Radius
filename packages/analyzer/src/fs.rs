@@ -24,7 +24,11 @@ impl RealFs {
     }
 
     fn full(&self, path: &str) -> PathBuf {
-        if path.is_empty() { self.root.clone() } else { self.root.join(path) }
+        if path.is_empty() {
+            self.root.clone()
+        } else {
+            self.root.join(path)
+        }
     }
 }
 
@@ -80,21 +84,39 @@ impl FileSystem for MemFs {
 
     fn exists(&self, path: &str) -> bool {
         self.files.contains_key(path)
-            || self.files.keys().any(|k| k.starts_with(&format!("{path}/")))
+            || self
+                .files
+                .keys()
+                .any(|k| k.starts_with(&format!("{path}/")))
     }
 
     fn read_dir(&self, path: &str) -> Vec<DirEntry> {
-        let prefix = if path.is_empty() { String::new() } else { format!("{path}/") };
+        let prefix = if path.is_empty() {
+            String::new()
+        } else {
+            format!("{path}/")
+        };
         let mut names: BTreeMap<String, bool> = BTreeMap::new();
         for key in self.files.keys() {
-            let Some(rest) = key.strip_prefix(&prefix) else { continue };
-            if rest.is_empty() { continue }
+            let Some(rest) = key.strip_prefix(&prefix) else {
+                continue;
+            };
+            if rest.is_empty() {
+                continue;
+            }
             match rest.split_once('/') {
-                Some((head, _)) => { names.insert(head.to_string(), true); }
-                None => { names.insert(rest.to_string(), false); }
+                Some((head, _)) => {
+                    names.insert(head.to_string(), true);
+                }
+                None => {
+                    names.insert(rest.to_string(), false);
+                }
             }
         }
-        names.into_iter().map(|(name, is_dir)| DirEntry { name, is_dir }).collect()
+        names
+            .into_iter()
+            .map(|(name, is_dir)| DirEntry { name, is_dir })
+            .collect()
     }
 }
 

@@ -6,8 +6,16 @@ const SOURCE_EXTENSIONS: [&str; 6] = ["ts", "tsx", "js", "jsx", "mjs", "cjs"];
 /// these is either generated output or a dependency tree, and walking them
 /// turns a 30-second analysis into a several-minute one.
 const IGNORED_DIRS: [&str; 10] = [
-    "node_modules", "dist", "build", "out", "coverage",
-    ".next", ".nuxt", ".output", ".git", "target",
+    "node_modules",
+    "dist",
+    "build",
+    "out",
+    "coverage",
+    ".next",
+    ".nuxt",
+    ".output",
+    ".git",
+    "target",
 ];
 
 pub fn discover(fs: &dyn FileSystem, root: &str) -> Vec<String> {
@@ -16,7 +24,11 @@ pub fn discover(fs: &dyn FileSystem, root: &str) -> Vec<String> {
 
     while let Some(dir) = stack.pop() {
         for entry in fs.read_dir(&dir) {
-            let path = if dir.is_empty() { entry.name.clone() } else { format!("{dir}/{}", entry.name) };
+            let path = if dir.is_empty() {
+                entry.name.clone()
+            } else {
+                format!("{dir}/{}", entry.name)
+            };
 
             if entry.is_dir {
                 if !IGNORED_DIRS.contains(&entry.name.as_str()) {
