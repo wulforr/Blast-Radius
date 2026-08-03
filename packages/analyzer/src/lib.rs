@@ -50,3 +50,6 @@ pub fn analyzer_info() -> AnalyzerInfo {
 
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
+
+pub mod discover;
+pub mod fs;
