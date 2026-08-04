@@ -53,3 +53,4 @@ pub mod wasm;
 
 pub mod discover;
 pub mod fs;
+pub mod parse;

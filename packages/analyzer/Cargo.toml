@@ -30,6 +30,11 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+oxc_allocator = { workspace = true }
+oxc_ast = { workspace = true }
+oxc_ast_visit = { workspace = true }
+oxc_parser = { workspace = true }
+oxc_span = { workspace = true }
 
 # wasm-bindgen is only meaningful on the wasm target. Gating it here keeps
 # `cargo test` on the host free of the whole bindgen dependency tree, which is
