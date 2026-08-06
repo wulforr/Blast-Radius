@@ -1,4 +1,5 @@
 pub mod relative;
+pub mod tsconfig;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Resolved {

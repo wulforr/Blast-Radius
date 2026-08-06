@@ -18,28 +18,15 @@ pub fn resolve_relative(fs: &dyn FileSystem, importer: &str, specifier: &str) ->
     }
 
     let base = join_importer_dir(importer, specifier);
-    let stem = strip_ts_output_extension(&base);
-
-    if is_file(fs, &base) {
-        return Some(Resolved::File(base));
-    }
-    for candidate in extension_candidates(&base) {
-        if is_file(fs, &candidate) {
-            return Some(Resolved::File(candidate));
-        }
+    if let Some(found) = probe_file(fs, &base) {
+        return Some(Resolved::File(found));
     }
     // The stripped stem only differs when the specifier named a js-family
-    // extension; probing its index covers `./dir.js` pointing at a directory.
+    // extension; probing it covers `./round.js` pointing at `round.ts`.
+    let stem = strip_ts_output_extension(&base);
     if stem != base {
-        for candidate in extension_candidates(&stem) {
-            if is_file(fs, &candidate) {
-                return Some(Resolved::File(candidate));
-            }
-        }
-    }
-    for candidate in index_candidates(&base) {
-        if is_file(fs, &candidate) {
-            return Some(Resolved::File(candidate));
+        if let Some(found) = probe_file(fs, &stem) {
+            return Some(Resolved::File(found));
         }
     }
 
@@ -51,6 +38,18 @@ fn is_relative(specifier: &str) -> bool {
         || specifier.starts_with("../")
         || specifier == "."
         || specifier == ".."
+}
+
+/// Try a base path as a file: exact, then each extension in ladder order,
+/// then `index.*`. Shared by the relative rung and the tsconfig-paths rung.
+pub(crate) fn probe_file(fs: &dyn FileSystem, base: &str) -> Option<String> {
+    if is_file(fs, base) {
+        return Some(base.to_string());
+    }
+    extension_candidates(base)
+        .into_iter()
+        .chain(index_candidates(base))
+        .find(|candidate| is_file(fs, candidate))
 }
 
 /// `base`, then `base` + each extension in ladder order, then
