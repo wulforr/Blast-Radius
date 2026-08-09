@@ -53,5 +53,6 @@ pub mod wasm;
 
 pub mod discover;
 pub mod fs;
+pub mod graph;
 pub mod parse;
 pub mod resolve;
