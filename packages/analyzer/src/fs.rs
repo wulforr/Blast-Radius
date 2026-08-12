@@ -72,6 +72,10 @@ impl MemFs {
         }
     }
 
+    pub fn from_map(files: BTreeMap<String, String>) -> Self {
+        Self { files }
+    }
+
     pub fn insert(&mut self, path: &str, contents: &str) {
         self.files.insert(path.to_string(), contents.to_string());
     }

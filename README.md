@@ -15,8 +15,11 @@ explains why this is an Action rather than a GitHub App.
 
 ## Status
 
-Early. Milestone M0 (toolchain and CI) is done; the analyzer does not analyse
-anything yet. See §10 of the spec for the milestone list.
+Milestones M0–M4 are done: the analyzer walks a tree, parses imports with
+`oxc`, resolves them (relative, `tsconfig` paths, workspace packages),
+builds the import graph, and returns the reverse-reachable set of a diff —
+with unresolved, dynamic-gap, and parse-failure accounting on every result.
+See §10 of the spec for the milestone list.
 
 ## Layout
 
@@ -57,6 +60,24 @@ node ../../scripts/wasm-smoke.mjs
 
 `pkg/` is generated and git-ignored. The wasm that Actions actually execute is
 committed under `packages/action/dist/`, which arrives with milestone M5.
+
+## Notable engineering decisions
+
+- **File contents cross the WASM boundary explicitly.** `wasm32-unknown-unknown`
+  has no filesystem, so `analyzeJson` takes `{"changed": [...],
+  "files": {"path": "contents"}}` and analyses an in-memory tree. The Action
+  walks the checkout in JavaScript and ships the contents over.
+- **Performance, measured.** A synthetic 5,001-file tree (import chain plus
+  one module imported by every file) analyses in ~190ms wall clock
+  (`build_graph` ~189ms, `reverse_reach` <1ms) in a native release build on
+  Apple Silicon — two orders of magnitude inside the 30-second budget from
+  spec §4, single-threaded. `rayon` parallelisation is deferred until a real
+  repository says otherwise.
+- **Known limitations of the resolver.** `package.json#exports` conditions are
+  not read — only `main` (plus `src/index.ts`, `index.ts`, `index.js`
+  fallbacks) locates a workspace entry. `pnpm-workspace.yaml` is parsed by
+  hand (a `packages:` key plus `- 'glob'` lines); anything fancier is
+  ignored rather than misread.
 
 ## Licence
 
