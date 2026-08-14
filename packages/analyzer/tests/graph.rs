@@ -76,3 +76,31 @@ fn an_external_import_creates_no_node() {
 fn output_is_deterministic_across_runs() {
     assert_eq!(fixture("plain").files, fixture("plain").files);
 }
+
+#[test]
+fn an_unreadable_file_is_reported_not_silent() {
+    // A file discovery finds but reading cannot decode — non-UTF8 bytes on
+    // disk, or a file deleted mid-walk — must show up in health accounting.
+    // Silently skipping it would report a confident radius over a broken
+    // graph, the exact failure hard constraint 3 exists to prevent.
+    let dir = std::env::temp_dir().join("blast-radius-unreadable");
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir).expect("clean slate");
+    }
+    std::fs::create_dir_all(dir.join("src")).expect("mkdir");
+    std::fs::write(dir.join("src/ok.ts"), "export const ok = 1\n").expect("write");
+    std::fs::write(dir.join("src/bad.ts"), [0xffu8, 0xfe, 0x00]).expect("write");
+
+    let graph = build_graph(&RealFs::new(&dir), "");
+
+    std::fs::remove_dir_all(&dir).expect("cleanup");
+    assert!(
+        graph.id_of("src/bad.ts").is_some(),
+        "discovery still indexes it"
+    );
+    assert!(
+        graph.parse_failures.contains(&"src/bad.ts".to_string()),
+        "an unreadable file must dent the health counters: {:?}",
+        graph.parse_failures
+    );
+}

@@ -76,7 +76,14 @@ pub fn build_graph(fs: &dyn FileSystem, root: &str) -> Graph {
         let Some(file) = graph.files.get(index).cloned() else {
             continue;
         };
-        let Some(text) = fs.read(&file) else { continue };
+        // A file discovery found but reading cannot supply — non-UTF8 bytes,
+        // missing permissions, a mid-walk deletion — contributes no edges, so
+        // it dents the health counters instead of vanishing. A repo where many
+        // files land here must read as broken, never as confidently clean.
+        let Some(text) = fs.read(&file) else {
+            graph.parse_failures.push(file.clone());
+            continue;
+        };
         let parsed = parse_imports(&text, &file);
         if parsed.parse_failed {
             graph.parse_failures.push(file.clone());
