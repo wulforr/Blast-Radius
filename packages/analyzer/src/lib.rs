@@ -97,7 +97,10 @@ pub struct AnalyzeResult {
 /// modules the changed files transitively reach, shallowest first.
 #[must_use]
 pub fn analyze(fs: &dyn fs::FileSystem, request: &AnalyzeRequest) -> AnalyzeResult {
-    let graph = graph::build_graph(fs, &request.root);
+    // Scope the filesystem, not the paths: everything downstream works in
+    // root-relative paths, so `changed` matches graph nodes exactly.
+    let scoped = fs::ScopedFs::new(fs, &request.root);
+    let graph = graph::build_graph(&scoped, "");
     let reached = reach::reverse_reach(&graph, &request.changed);
 
     let mut reached: Vec<ReachedFile> = reached

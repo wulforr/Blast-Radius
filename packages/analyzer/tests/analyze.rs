@@ -59,3 +59,32 @@ fn a_repository_with_no_sources_is_empty_not_an_error() {
     assert!(result.reached.is_empty());
     assert_eq!(result.stats.files, 0);
 }
+
+#[test]
+fn a_scoped_root_keeps_paths_relative_to_the_scope() {
+    // `root` scopes analysis to a subdirectory; `changed` is relative to that
+    // same root, and so is everything in the result. Fs-relative paths here
+    // would silently yield an empty reach.
+    let root = format!("{}/tests/fixtures/plain", env!("CARGO_MANIFEST_DIR"));
+    let result = analyze(
+        &RealFs::new(root),
+        &AnalyzeRequest {
+            root: "src/pricing".into(),
+            changed: vec!["total.ts".into()],
+        },
+    );
+    assert_eq!(result.stats.files, 2);
+    let paths: Vec<&str> = result.reached.iter().map(|r| r.path.as_str()).collect();
+    assert!(
+        paths.contains(&"total.ts"),
+        "changed file at depth 0: {paths:?}"
+    );
+    assert!(
+        paths.contains(&"index.ts"),
+        "direct importer at depth 1: {paths:?}"
+    );
+    assert!(
+        !paths.iter().any(|p| p.starts_with("src/")),
+        "no fs-relative paths may leak: {paths:?}"
+    );
+}

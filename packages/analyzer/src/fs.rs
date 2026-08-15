@@ -129,3 +129,46 @@ pub fn normalise(path: &Path) -> String {
     let text = path.to_string_lossy().replace('\\', "/");
     text.strip_prefix("./").unwrap_or(&text).to_string()
 }
+
+/// A `FileSystem` view scoped to a subdirectory: every path is resolved under
+/// `root`, so everything downstream only ever sees root-relative paths. This
+/// is what keeps the "all graph paths are relative to the analysis root"
+/// convention true when analysis is scoped to a subdirectory — without it,
+/// `changed` paths would silently miss every node.
+pub struct ScopedFs<'f> {
+    inner: &'f dyn FileSystem,
+    root: String,
+}
+
+impl<'f> ScopedFs<'f> {
+    pub fn new(inner: &'f dyn FileSystem, root: &str) -> Self {
+        Self {
+            inner,
+            root: root.to_string(),
+        }
+    }
+
+    fn full(&self, path: &str) -> String {
+        if self.root.is_empty() {
+            path.to_string()
+        } else if path.is_empty() {
+            self.root.clone()
+        } else {
+            format!("{}/{}", self.root, path)
+        }
+    }
+}
+
+impl FileSystem for ScopedFs<'_> {
+    fn read(&self, path: &str) -> Option<String> {
+        self.inner.read(&self.full(path))
+    }
+
+    fn exists(&self, path: &str) -> bool {
+        self.inner.exists(&self.full(path))
+    }
+
+    fn read_dir(&self, path: &str) -> Vec<DirEntry> {
+        self.inner.read_dir(&self.full(path))
+    }
+}
