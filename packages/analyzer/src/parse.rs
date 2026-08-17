@@ -105,12 +105,19 @@ impl<'a> Visit<'a> for Collector<'_> {
                         Expression::StringLiteral(lit) => Some(lit),
                         _ => None,
                     });
-                if let Some(lit) = literal {
-                    self.imports.push(ImportRef {
+                match literal {
+                    Some(lit) => self.imports.push(ImportRef {
                         specifier: Some(lit.value.as_str().to_string()),
                         kind: ImportKind::Require,
                         line: line_of(self.source, lit.span.start),
-                    });
+                    }),
+                    // A computed `require` hides its target exactly like a
+                    // computed `import()` does: a gap, not silence.
+                    None => self.imports.push(ImportRef {
+                        specifier: None,
+                        kind: ImportKind::DynamicExpression,
+                        line: line_of(self.source, it.span.start),
+                    }),
                 }
             }
         }

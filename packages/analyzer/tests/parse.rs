@@ -42,6 +42,23 @@ fn finds_require_with_a_literal_argument() {
 }
 
 #[test]
+fn a_computed_require_is_a_gap_not_silence() {
+    // Mirrors the dynamic-import gap: a `require` whose target is not
+    // statically knowable is a graph hole that must be counted, never
+    // dropped. Spec §4: "Record everything else as a dynamic gap."
+    for source in ["const a = require(name)", "const b = require()"] {
+        let parsed = parse_imports(source, "t.cjs");
+        assert_eq!(parsed.imports.len(), 1, "source: {source}");
+        assert!(
+            matches!(parsed.imports[0].kind, ImportKind::DynamicExpression),
+            "source: {source}"
+        );
+        assert!(parsed.imports[0].specifier.is_none(), "source: {source}");
+        assert!(parsed.imports[0].line > 0, "source: {source}");
+    }
+}
+
+#[test]
 fn distinguishes_literal_from_computed_dynamic_imports() {
     let source = r#"
         const known = () => import('./known')
