@@ -1,0 +1,36 @@
+name: 'Blast Radius'
+description: "Your PR changed N files. Here's what it actually touched."
+branding:
+  icon: 'activity'
+  color: 'gray-dark'
+inputs:
+  paths:
+    description: 'Roots to analyse, one per line (relative to the repo root).'
+    required: false
+    default: '.'
+  max-depth:
+    description: 'Reach-tree display depth (used by the PR comment).'
+    required: false
+    default: '3'
+  fail-on-untested:
+    description: 'Exit non-zero if untested modules are reached (enforced from M7).'
+    required: false
+    default: 'false'
+  comment:
+    description: 'Post/update the sticky PR comment (enabled from M6).'
+    required: false
+    default: 'true'
+  gallery:
+    description: 'Opt in to the public gallery (enabled from M9).'
+    required: false
+    default: 'false'
+  gallery-token:
+    description: 'HMAC secret for gallery submission (used from M9).'
+    required: false
+    default: ''
+outputs:
+  result-path:
+    description: 'Path to the written blast-radius.json artifact.'
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

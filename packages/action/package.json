@@ -1,0 +1,21 @@
+{
+  "name": "@blast-radius/action",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Report the modules, routes and untested paths a PR actually reaches.",
+  "scripts": {
+    "test": "vitest run",
+    "check": "tsc --noEmit",
+    "build": "ncc build src/main.ts -o dist && node scripts/copy-wasm.mjs"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vercel/ncc": "^0.38.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  }
+}
