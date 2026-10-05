@@ -15,11 +15,9 @@ explains why this is an Action rather than a GitHub App.
 
 ## Status
 
-Milestones M0–M4 are done: the analyzer walks a tree, parses imports with
-`oxc`, resolves them (relative, `tsconfig` paths, workspace packages),
-builds the import graph, and returns the reverse-reachable set of a diff —
-with unresolved, dynamic-gap, and parse-failure accounting on every result.
-See §10 of the spec for the milestone list.
+Milestones M0–M5 are done: the analyzer (M1–M4) ships as a runnable GitHub
+Action that analyses a PR's files and writes `blast-radius.json`. The sticky
+PR comment arrives with M6. See §10 of the spec for the milestone list.
 
 ## Layout
 
@@ -50,6 +48,11 @@ cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 ```
 
+```bash
+pnpm --filter @blast-radius/action test    # action unit tests (needs pkg/ built, see below)
+pnpm --filter @blast-radius/action run build  # bundles TS + WASM into dist/, which IS committed
+```
+
 Build the WebAssembly artifact:
 
 ```bash
@@ -59,7 +62,34 @@ node ../../scripts/wasm-smoke.mjs
 ```
 
 `pkg/` is generated and git-ignored. The wasm that Actions actually execute is
-committed under `packages/action/dist/`, which arrives with milestone M5.
+committed under `packages/action/dist/`, rebuilt by `pnpm --filter
+@blast-radius/action run build` (which runs `wasm-pack` output through `ncc`
+and refuses a stale glue file).
+
+## Usage
+
+```yaml
+# .github/workflows/blast-radius.yml
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  blast-radius:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shauryasingh/blast-radius@v0
+        with:
+          paths: '.'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: blast-radius-json
+          path: blast-radius.json
+```
+
+Analysis runs on your own runner; nothing leaves it in M5 (gallery opt-in
+arrives with M9). A failure anywhere in the Action warns and exits zero —
+it never fails your CI.
 
 ## Notable engineering decisions
 

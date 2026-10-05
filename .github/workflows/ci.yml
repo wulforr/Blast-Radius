@@ -73,3 +73,53 @@ jobs:
           name: analyzer-wasm
           path: packages/analyzer/pkg/
           if-no-files-found: error
+
+  action:
+    name: action (node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: v0.15.0
+
+      - name: Build analyzer.wasm
+        working-directory: packages/analyzer
+        run: wasm-pack build --target nodejs --out-dir pkg --out-name analyzer --release
+
+      - name: Install action deps
+        working-directory: packages/action
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: packages/action
+        run: pnpm exec tsc --noEmit
+
+      - name: Test
+        working-directory: packages/action
+        run: pnpm test
+
+      - name: Build dist
+        working-directory: packages/action
+        run: pnpm run build
+
+      # A PR that changes action source without rebuilding dist/ is
+      # incomplete. The committed artifact is what Actions actually run.
+      - name: Dist is fresh
+        run: git diff --exit-code -- packages/action/dist/

@@ -1,0 +1,36 @@
+name: blast-radius (self)
+
+on:
+  pull_request:
+
+# Read-only self-test: listing PR files needs pull-requests: read.
+# (The M6 comment will need write; that scope arrives with the comment.)
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  analyze:
+    name: analyse this PR with itself
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run Blast Radius on this PR
+        id: blast
+        uses: ./packages/action
+        with:
+          paths: '.'
+
+      - name: Upload result
+        uses: actions/upload-artifact@v7
+        with:
+          name: blast-radius-json
+          path: blast-radius.json
+          if-no-files-found: error
+
+      - name: Assert a sane result
+        run: |
+          test -f blast-radius.json
+          jq -e '.stats.files > 0' blast-radius.json
+          jq -e '.reached | type == "array"' blast-radius.json
