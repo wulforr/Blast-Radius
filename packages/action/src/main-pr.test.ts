@@ -66,13 +66,20 @@ describe('main on PR events', () => {
     process.env['INPUT_COMMENT'] = 'false';
     const { main } = await freshMain();
     let called = 0;
+    let execSeen: unknown;
+    const lister = (_token: string) => async () => [{ filename: 'src/a.ts', status: 'modified' }];
     await main(
-      async () => ({ body: 'x' }),
+      async (options) => {
+        execSeen = options;
+        return { body: 'x' };
+      },
       async () => {
         called += 1;
         return 'created';
       },
+      lister,
     );
     expect(called).toBe(0);
+    expect(execSeen).toMatchObject({ changed: ['src/a.ts'] });
   });
 });

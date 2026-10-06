@@ -72,7 +72,20 @@ describe('renderComment', () => {
     );
     expect(body).toContain('a.ts (depth 1)');
     expect(body).not.toContain('b.ts (depth 9)');
-    expect(body).toContain('…and 1 more below depth 3');
+    expect(body).toContain('…and 1 more (1 below depth 3)');
+  });
+
+  test('the tree overflow line counts capped and below-depth lines together', () => {
+    const inScope = new Array(45).fill(0).map((_, i) => ({ path: `m${i}.ts`, depth: 1 }));
+    const deep = new Array(5).fill(0).map((_, i) => ({ path: `d${i}.ts`, depth: 9 }));
+    const body = renderComment(
+      base({
+        reached: [...inScope, ...deep],
+        maxDepth: 3,
+        classification: { routes: [], tests: [], publicApi: [] },
+      }),
+    );
+    expect(body).toContain('…and 30 more (5 below depth 3)');
   });
 });
 

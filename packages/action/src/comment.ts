@@ -68,7 +68,7 @@ export function renderComment(data: CommentData): string {
   const hidden = reached.length - Math.min(inScope.length, MAX_LIST_LINES);
   const deeper = reached.filter((r) => r.depth > data.maxDepth).length;
   if (deeper > 0) {
-    treeLines.push(`   …and ${deeper} more below depth ${data.maxDepth}`);
+    treeLines.push(`   …and ${hidden} more (${deeper} below depth ${data.maxDepth})`);
   } else if (hidden > 0) {
     treeLines.push(`   …and ${hidden} more`);
   }
