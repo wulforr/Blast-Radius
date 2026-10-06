@@ -46,3 +46,33 @@ describe('collectFiles', () => {
     );
   });
 });
+
+describe('collectFiles hardening', () => {
+  test('a file or missing path warns instead of silently emptying the analysis', () => {
+    const messages: string[] = [];
+    const stdout = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: unknown) => {
+      messages.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      expect(collectFiles(workspace, ['src/index.ts'])).toEqual({});
+      expect(collectFiles(workspace, ['nope'])).toEqual({});
+    } finally {
+      process.stdout.write = stdout;
+    }
+    expect(messages.join('')).toMatch(/::warning::.*not a readable directory/);
+  });
+
+  test('a symlink escaping the workspace is not walked', () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'blast-outside-'));
+    try {
+      fs.writeFileSync(path.join(outside, 'secret.ts'), 'export const s = 1\n');
+      fs.symlinkSync(outside, path.join(workspace, 'link'));
+      expect(collectFiles(workspace, ['link'])).toEqual({});
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+      fs.rmSync(path.join(workspace, 'link'), { force: true });
+    }
+  });
+});

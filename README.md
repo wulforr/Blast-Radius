@@ -15,9 +15,10 @@ explains why this is an Action rather than a GitHub App.
 
 ## Status
 
-Milestones M0–M5 are done: the analyzer (M1–M4) ships as a runnable GitHub
-Action that analyses a PR's files and writes `blast-radius.json`. The sticky
-PR comment arrives with M6. See §10 of the spec for the milestone list.
+Milestones M0–M6 are done: the Action classifies reached modules, renders the
+blast-radius comment, and maintains exactly one sticky comment per PR.
+Untested-path detection arrives with M7. See §10 of the spec for the
+milestone list.
 
 ## Layout
 
@@ -72,7 +73,7 @@ and refuses a stale glue file).
 # .github/workflows/blast-radius.yml
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write # posts the sticky comment and nothing else
 jobs:
   blast-radius:
     runs-on: ubuntu-latest

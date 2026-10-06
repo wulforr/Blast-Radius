@@ -36,7 +36,14 @@ function isAnalysable(name: string): boolean {
  */
 export function collectFiles(workspace: string, roots: string[]): Record<string, string> {
   const files: Record<string, string> = {};
-  const base = path.resolve(workspace);
+  // Canonicalise once: on macOS /var and /tmp are symlinks, so string
+  // comparison against an unresolved base would reject everything.
+  let base: string;
+  try {
+    base = fs.realpathSync(path.resolve(workspace));
+  } catch {
+    return {};
+  }
   const seen = new Set<string>();
 
   for (const root of roots) {
@@ -45,9 +52,37 @@ export function collectFiles(workspace: string, roots: string[]): Record<string,
       core.warning(`Ignoring paths entry '${root}': outside the workspace.`);
       continue;
     }
-    if (seen.has(abs)) continue;
-    seen.add(abs);
-    walk(abs, base, files);
+    let canonical: string;
+    try {
+      canonical = fs.realpathSync(abs);
+    } catch {
+      core.warning(`Ignoring paths entry '${root}': not a readable directory.`);
+      continue;
+    }
+    // realpathSync succeeds on files too, so directory-ness is checked
+    // explicitly before the containment check below.
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(canonical);
+    } catch {
+      core.warning(`Ignoring paths entry '${root}': not a readable directory.`);
+      continue;
+    }
+    if (!stat.isDirectory()) {
+      core.warning(`Ignoring paths entry '${root}': not a readable directory.`);
+      continue;
+    }
+    // Resolve symlinks before the containment check: a committed
+    // `link -> /etc` otherwise passes the string check above and gets walked.
+    // (M5 has no exfiltration path — contents only land in the local artifact —
+    // but a scope escape is still a wrong analysis.)
+    if (canonical !== base && !canonical.startsWith(base + path.sep)) {
+      core.warning(`Ignoring paths entry '${root}': resolves outside the workspace.`);
+      continue;
+    }
+    if (seen.has(canonical)) continue;
+    seen.add(canonical);
+    walk(canonical, base, files);
   }
   return files;
 }

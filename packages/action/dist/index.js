@@ -30021,6 +30021,108 @@ function analyzeTree(pkgDir, files, changed) {
 
 /***/ }),
 
+/***/ 6005:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.isTest = isTest;
+exports.isRoute = isRoute;
+exports.isPublicApi = isPublicApi;
+exports.classify = classify;
+const TEST_PATTERNS = [/\.test\.[^/]+$/, /\.spec\.[^/]+$/, /(^|\/)__tests__\//];
+// App-router pages, pages directories, and explicit route folders.
+const ROUTE_PATHS = [/^app\/.+\/page\.tsx$/, /^pages\//, /^src\/routes\//];
+// A handler call (`app.get(`, `router.post(` …) means a route only when the
+// file also wires a framework — otherwise every `map.get(` in the world
+// would match.
+const HANDLER_CALL = /\.(get|post|put|delete|patch|options|head|all|use)\s*\(/;
+const FRAMEWORK_IMPORT = /(from\s+['"])(express|hono)(['"])|require\(\s*['"](express|hono)(\/[^'"]*)?['"]\s*\)/;
+function isTest(path) {
+    return TEST_PATTERNS.some((re) => re.test(path));
+}
+function isRoute(path, contents) {
+    if (ROUTE_PATHS.some((re) => re.test(path)))
+        return true;
+    if (contents === undefined)
+        return false;
+    return FRAMEWORK_IMPORT.test(contents) && HANDLER_CALL.test(contents);
+}
+const SOURCE_EXTENSIONS = ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs'];
+function stripJsExtension(target) {
+    // `./index.js` in `exports` usually means `./index.ts` on disk.
+    const dot = target.lastIndexOf('.');
+    if (dot < 0)
+        return target;
+    const ext = target.slice(dot + 1);
+    if (ext === 'ts' || ext === 'tsx')
+        return target;
+    if (SOURCE_EXTENSIONS.includes(ext))
+        return target.slice(0, dot);
+    return target;
+}
+function exportsTargets(manifest) {
+    let parsed;
+    try {
+        parsed = JSON.parse(manifest);
+    }
+    catch {
+        return [];
+    }
+    if (typeof parsed !== 'object' || parsed === null)
+        return [];
+    const exportsField = parsed['exports'];
+    const out = [];
+    const visit = (node) => {
+        if (typeof node === 'string') {
+            out.push(node);
+        }
+        else if (Array.isArray(node)) {
+            for (const item of node)
+                visit(item);
+        }
+        else if (typeof node === 'object' && node !== null) {
+            for (const value of Object.values(node))
+                visit(value);
+        }
+    };
+    visit(exportsField);
+    return out;
+}
+function isPublicApi(path, files) {
+    // A root barrel file: `index.ts` with no directory.
+    if (/^index\.(ts|tsx|js|jsx|mjs|cjs)$/.test(path))
+        return true;
+    const manifest = files['package.json'];
+    if (manifest === undefined)
+        return false;
+    return exportsTargets(manifest).some((target) => {
+        const bare = target.startsWith('./') ? target.slice(2) : target;
+        return path === bare || path === `${stripJsExtension(bare)}.ts` || path === `${stripJsExtension(bare)}.tsx`;
+    });
+}
+function classify(reached, files) {
+    const routes = [];
+    const tests = [];
+    const publicApi = [];
+    for (const { path } of reached) {
+        if (isRoute(path, files[path]))
+            routes.push(path);
+        if (isTest(path))
+            tests.push(path);
+        if (isPublicApi(path, files))
+            publicApi.push(path);
+    }
+    routes.sort();
+    tests.sort();
+    publicApi.sort();
+    return { routes, tests, publicApi };
+}
+
+
+/***/ }),
+
 /***/ 8501:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -30097,7 +30199,15 @@ function isAnalysable(name) {
  */
 function collectFiles(workspace, roots) {
     const files = {};
-    const base = path.resolve(workspace);
+    // Canonicalise once: on macOS /var and /tmp are symlinks, so string
+    // comparison against an unresolved base would reject everything.
+    let base;
+    try {
+        base = fs.realpathSync(path.resolve(workspace));
+    }
+    catch {
+        return {};
+    }
     const seen = new Set();
     for (const root of roots) {
         const abs = path.resolve(base, root);
@@ -30105,10 +30215,40 @@ function collectFiles(workspace, roots) {
             core.warning(`Ignoring paths entry '${root}': outside the workspace.`);
             continue;
         }
-        if (seen.has(abs))
+        let canonical;
+        try {
+            canonical = fs.realpathSync(abs);
+        }
+        catch {
+            core.warning(`Ignoring paths entry '${root}': not a readable directory.`);
             continue;
-        seen.add(abs);
-        walk(abs, base, files);
+        }
+        // realpathSync succeeds on files too, so directory-ness is checked
+        // explicitly before the containment check below.
+        let stat;
+        try {
+            stat = fs.statSync(canonical);
+        }
+        catch {
+            core.warning(`Ignoring paths entry '${root}': not a readable directory.`);
+            continue;
+        }
+        if (!stat.isDirectory()) {
+            core.warning(`Ignoring paths entry '${root}': not a readable directory.`);
+            continue;
+        }
+        // Resolve symlinks before the containment check: a committed
+        // `link -> /etc` otherwise passes the string check above and gets walked.
+        // (M5 has no exfiltration path — contents only land in the local artifact —
+        // but a scope escape is still a wrong analysis.)
+        if (canonical !== base && !canonical.startsWith(base + path.sep)) {
+            core.warning(`Ignoring paths entry '${root}': resolves outside the workspace.`);
+            continue;
+        }
+        if (seen.has(canonical))
+            continue;
+        seen.add(canonical);
+        walk(canonical, base, files);
     }
     return files;
 }
@@ -30136,6 +30276,137 @@ function walk(dir, base, files) {
             }
         }
     }
+}
+
+
+/***/ }),
+
+/***/ 4278:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.MARKER = void 0;
+exports.renderComment = renderComment;
+exports.upsertComment = upsertComment;
+exports.postComment = postComment;
+exports.MARKER = '<!-- blast-radius -->';
+// A section list never exceeds this many lines; the overflow becomes one
+// "…and N more" line. The comment must never be the longest thing on the PR.
+const MAX_LIST_LINES = 20;
+function plural(count, one, many) {
+    return `${count} ${count === 1 ? one : many}`;
+}
+function escapeHtml(text) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function cappedList(items) {
+    const shown = items.slice(0, MAX_LIST_LINES).map((item) => `   ${escapeHtml(item)}`);
+    if (items.length > shown.length) {
+        shown.push(`   …and ${items.length - shown.length} more`);
+    }
+    return shown.join('\n');
+}
+function renderComment(data) {
+    const { classification, reached, stats } = data;
+    const lines = [
+        exports.MARKER,
+        '### 🔴 Blast radius',
+        '',
+        `**${plural(data.changedCount, 'file changed', 'files changed')}** → ` +
+            `**${plural(reached.length, 'module', 'modules')}**, ` +
+            `**${plural(classification.routes.length, 'route', 'routes')}**, ` +
+            `**${plural(classification.tests.length, 'test', 'tests')}** affected.`,
+    ];
+    if (data.untested.length > 0) {
+        const verb = data.untested.length === 1 ? 'has' : 'have';
+        lines.push('', `⚠️ **${plural(data.untested.length, 'affected module', 'affected modules')} ${verb} no test coverage in their reach.**`, cappedList([...data.untested].sort()));
+    }
+    lines.push('', `<details><summary>Affected routes (${classification.routes.length})</summary>`, '', classification.routes.length > 0 ? cappedList(classification.routes) : 'None detected.', '', '</details>');
+    const inScope = reached.filter((r) => r.depth <= data.maxDepth);
+    const treeLines = inScope.slice(0, MAX_LIST_LINES).map((r) => `   ${escapeHtml(r.path)} (depth ${r.depth})`);
+    const hidden = reached.length - Math.min(inScope.length, MAX_LIST_LINES);
+    const deeper = reached.filter((r) => r.depth > data.maxDepth).length;
+    if (deeper > 0) {
+        treeLines.push(`   …and ${deeper} more below depth ${data.maxDepth}`);
+    }
+    else if (hidden > 0) {
+        treeLines.push(`   …and ${hidden} more`);
+    }
+    lines.push('', `<details><summary>Reach tree, depth ≤ ${data.maxDepth}</summary>`, '', treeLines.length > 0 ? treeLines.join('\n') : 'None.', '', '</details>');
+    const health = `Graph health: ${stats.edges} imports, ${stats.unresolved} unresolved, ${stats.dynamicGaps} dynamic`;
+    const gaps = [];
+    if (data.unresolved.length > 0) {
+        gaps.push('Unresolved imports:', 
+        // Escaped inside cappedList, so hostile specifiers render as text.
+        cappedList(data.unresolved.map((u) => `${u.file} → ${u.specifier}`)));
+    }
+    if (stats.parseFailures > 0) {
+        gaps.push(`   ${stats.parseFailures} files could not be read or parsed.`);
+    }
+    lines.push('', `<details><summary>${health}</summary>`, '', gaps.length > 0 ? gaps.join('\n') : health + '.', '', '</details>');
+    return lines.join('\n');
+}
+const github = __importStar(__nccwpck_require__(5251));
+async function upsertComment(client, owner, repo, pr, body) {
+    const comments = await client.list({ owner, repo, issue_number: pr });
+    const existing = comments.find((c) => (c.body ?? '').includes(exports.MARKER));
+    if (existing === undefined) {
+        await client.create({ owner, repo, issue_number: pr, body });
+        return 'created';
+    }
+    await client.update({ owner, repo, comment_id: existing.id, body });
+    return 'updated';
+}
+async function postComment(args) {
+    if (args.token === '') {
+        throw new Error('GITHUB_TOKEN is required to post the PR comment.');
+    }
+    const octokit = github.getOctokit(args.token);
+    return upsertComment({
+        list: (params) => octokit.paginate(octokit.rest.issues.listComments, {
+            owner: params.owner,
+            repo: params.repo,
+            issue_number: params.issue_number,
+            per_page: 100,
+        }),
+        create: (params) => octokit.rest.issues.createComment(params),
+        update: (params) => octokit.rest.issues.updateComment(params),
+    }, args.owner, args.repo, args.pr, args.body);
 }
 
 
@@ -30281,46 +30552,55 @@ const core = __importStar(__nccwpck_require__(4442));
 const github = __importStar(__nccwpck_require__(5251));
 const inputs_js_1 = __nccwpck_require__(1318);
 const diff_js_1 = __nccwpck_require__(4720);
+const comment_js_1 = __nccwpck_require__(4278);
 const run_js_1 = __nccwpck_require__(3402);
+function defaultLister(token) {
+    const octokit = github.getOctokit(token);
+    return (params) => octokit.paginate(octokit.rest.pulls.listFiles, {
+        owner: params.owner,
+        repo: params.repo,
+        pull_number: params.pull_number,
+        per_page: 100,
+    });
+}
 /**
  * Failure-proof entry point. *Every* error — no token, API outage, unreadable
  * checkout, wasm failure — becomes a warning and exit zero. Hard constraint:
  * this Action must never fail someone's CI. (The sole future exception is
  * `fail-on-untested`, enforced from M7.)
  */
-async function main(exec = run_js_1.run) {
+async function main(exec = run_js_1.run, poster = comment_js_1.postComment, lister = defaultLister) {
     try {
-        await execute(exec);
+        await execute(exec, poster, lister);
     }
     catch (error) {
         core.warning(`Blast Radius analysis skipped: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
-async function execute(exec) {
+async function execute(exec, poster, lister) {
     const inputs = (0, inputs_js_1.getInputs)();
     const workspace = process.env['GITHUB_WORKSPACE'] ?? process.cwd();
     const context = github.context;
     const pr = context.payload.pull_request;
-    let changed;
-    if (typeof pr?.number !== 'number') {
-        core.warning('No pull_request in the event payload; analysing with an empty changed set.');
-        changed = [];
-    }
-    else {
+    const prNumber = typeof pr?.number === 'number' ? pr.number : null;
+    // `context.repo` throws when GITHUB_REPOSITORY is unset, so it is read
+    // only inside the PR branch — the non-PR path must never touch it (the
+    // existing push-event test pins this).
+    let target = null;
+    let changed = [];
+    if (prNumber !== null) {
         const token = process.env['GITHUB_TOKEN'] ?? '';
         if (token === '') {
             throw new Error('GITHUB_TOKEN is required to list PR files.');
         }
-        const octokit = github.getOctokit(token);
-        const { owner, repo } = context.repo;
-        changed = await (0, diff_js_1.getChangedFiles)((params) => octokit.paginate(octokit.rest.pulls.listFiles, {
-            owner: params.owner,
-            repo: params.repo,
-            pull_number: params.pull_number,
-            per_page: 100,
-        }), owner, repo, pr.number);
+        const octokitOwner = context.repo;
+        changed = await (0, diff_js_1.getChangedFiles)(lister(token), octokitOwner.owner, octokitOwner.repo, prNumber);
+        target = { owner: octokitOwner.owner, repo: octokitOwner.repo, pr: prNumber };
     }
-    await exec({
+    else {
+        core.warning('No pull_request in the event payload; analysing with an empty changed set.');
+    }
+    const out = await exec({
         workspace,
         roots: inputs.paths,
         changed,
@@ -30328,6 +30608,22 @@ async function execute(exec) {
         // which runs modules as ESM (no __dirname); the value is unused on the
         // stubbed-exec paths the tests exercise.
         analyzerDir: typeof __dirname === 'string' ? __dirname : process.cwd(),
+        maxDepth: inputs.maxDepth,
+    });
+    if (!inputs.comment) {
+        core.info('Comment posting is disabled (comment: false); skipping.');
+        return;
+    }
+    if (target === null) {
+        core.info('No pull_request in the event payload; skipping comment.');
+        return;
+    }
+    await poster({
+        owner: target.owner,
+        repo: target.repo,
+        pr: target.pr,
+        body: out.body,
+        token: process.env['GITHUB_TOKEN'] ?? '',
     });
 }
 if ( true && require.main === require.cache[eval('__filename')]) {
@@ -30381,16 +30677,28 @@ const core = __importStar(__nccwpck_require__(4442));
 const path = __importStar(__nccwpck_require__(6760));
 const node_fs_1 = __nccwpck_require__(3024);
 const analyzer_js_1 = __nccwpck_require__(4177);
+const classify_js_1 = __nccwpck_require__(6005);
 const collect_js_1 = __nccwpck_require__(8501);
+const comment_js_1 = __nccwpck_require__(4278);
 async function run(options) {
     const files = (0, collect_js_1.collectFiles)(options.workspace, options.roots);
     const result = (0, analyzer_js_1.analyzeTree)(options.analyzerDir, files, options.changed);
+    const classification = (0, classify_js_1.classify)(result.reached, files);
+    const body = (0, comment_js_1.renderComment)({
+        changedCount: options.changed.length,
+        reached: result.reached,
+        classification,
+        untested: [],
+        stats: result.stats,
+        unresolved: result.unresolved,
+        maxDepth: options.maxDepth,
+    });
     const resultPath = path.join(options.workspace, 'blast-radius.json');
     (0, node_fs_1.writeFileSync)(resultPath, JSON.stringify(result, null, 2) + '\n');
     core.setOutput('result-path', resultPath);
     core.info(`Blast radius: ${result.reached.length} modules reached, ` +
         `${result.stats.unresolved} unresolved, ${result.stats.dynamicGaps} dynamic gaps.`);
-    return { result, resultPath };
+    return { result, resultPath, classification, body };
 }
 
 
