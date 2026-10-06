@@ -91,6 +91,10 @@ pub struct AnalyzeResult {
     pub stats: GraphStats,
     pub unresolved: Vec<graph::UnresolvedRef>,
     pub dynamic_gaps: Vec<graph::DynamicGap>,
+    /// Forward edges as `[importer, imported]` pairs, for consumers that need to
+    /// walk the graph themselves (e.g. untested-path detection). `stats.edges`
+    /// equals `edges.len()`.
+    pub edges: Vec<(String, String)>,
 }
 
 /// Build the import graph under the request's root and return the set of
@@ -116,6 +120,17 @@ pub fn analyze(fs: &dyn fs::FileSystem, request: &AnalyzeRequest) -> AnalyzeResu
         .map(|targets| targets.len() as u32)
         .sum();
 
+    let mut edge_pairs: Vec<(String, String)> = Vec::new();
+    for (index, path) in graph.files.iter().enumerate() {
+        if let Some(targets) = graph.forward.get(index) {
+            for to in targets {
+                if let Some(target) = graph.files.get(to.0 as usize) {
+                    edge_pairs.push((path.clone(), target.clone()));
+                }
+            }
+        }
+    }
+
     AnalyzeResult {
         reached,
         stats: GraphStats {
@@ -127,6 +142,7 @@ pub fn analyze(fs: &dyn fs::FileSystem, request: &AnalyzeRequest) -> AnalyzeResu
         },
         unresolved: graph.unresolved,
         dynamic_gaps: graph.dynamic_gaps,
+        edges: edge_pairs,
     }
 }
 

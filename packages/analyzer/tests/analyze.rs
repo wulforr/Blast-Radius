@@ -88,3 +88,31 @@ fn a_scoped_root_keeps_paths_relative_to_the_scope() {
         "no fs-relative paths may leak: {paths:?}"
     );
 }
+
+#[test]
+fn exposes_forward_edges_matching_the_stats_count() {
+    let result = run("plain", &["src/util/round.ts"]);
+    assert!(result.stats.edges > 0);
+    assert_eq!(result.edges.len(), result.stats.edges as usize);
+}
+
+#[test]
+fn edges_point_from_importer_to_imported() {
+    let result = run("plain", &["src/util/round.ts"]);
+    assert!(
+        result.edges.contains(&(
+            "src/index.ts".to_string(),
+            "src/pricing/index.ts".to_string()
+        )),
+        "unexpected edges: {:?}",
+        result.edges
+    );
+    assert!(
+        result.edges.contains(&(
+            "src/pricing/total.ts".to_string(),
+            "src/util/round.ts".to_string()
+        )),
+        "unexpected edges: {:?}",
+        result.edges
+    );
+}
