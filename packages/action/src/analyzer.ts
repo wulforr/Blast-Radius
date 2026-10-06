@@ -26,6 +26,7 @@ export interface AnalyzeResult {
   stats: GraphStats;
   unresolved: UnresolvedRef[];
   dynamicGaps: DynamicGap[];
+  edges: Array<[string, string]>;
 }
 
 export interface AnalyzerModule {

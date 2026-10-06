@@ -46,3 +46,60 @@ describe('run', () => {
     expect(result.stats.files).toBe(0);
   });
 });
+
+describe('run untested detection', () => {
+  const TREE: Record<string, string> = {
+    'src/util.ts': 'export const u = 1\n',
+    'src/app.ts': "import { u } from './util'\nexport const a = u\n",
+    'src/app.test.ts': "import { a } from './app'\ntest('a', () => {})\n",
+    'src/lonely.ts': 'export const l = 1\n',
+    'src/holder.ts': "import { l } from './lonely'\nexport const h = l\n",
+  };
+
+  function tree(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'blast-untested-'));
+    for (const [rel, body] of Object.entries(TREE)) {
+      fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(dir, rel), body);
+    }
+    return dir;
+  }
+
+  test('flags a deliberately untested module and spares the covered ones', async () => {
+    const workspace = tree();
+    try {
+      const { result, untested, body } = await run({
+        workspace,
+        roots: ['.'],
+        changed: ['src/util.ts', 'src/lonely.ts'],
+        analyzerDir: PKG,
+        maxDepth: 3,
+      });
+      expect(untested).toEqual(['src/holder.ts', 'src/lonely.ts']);
+      expect(result.reached.map((r) => r.path).sort()).toEqual(
+        ['src/app.test.ts', 'src/app.ts', 'src/holder.ts', 'src/lonely.ts', 'src/util.ts'].sort(),
+      );
+      expect(body).toContain('⚠️ **2 affected modules have no test coverage in their reach.**');
+      expect(body).toContain('src/lonely.ts');
+    } finally {
+      fs.rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  test('a PR that only adds tests passes with nothing untested', async () => {
+    const workspace = tree();
+    try {
+      const { untested, body } = await run({
+        workspace,
+        roots: ['.'],
+        changed: ['src/app.test.ts'],
+        analyzerDir: PKG,
+        maxDepth: 3,
+      });
+      expect(untested).toEqual([]);
+      expect(body).not.toContain('⚠️');
+    } finally {
+      fs.rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+});
