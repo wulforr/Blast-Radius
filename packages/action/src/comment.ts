@@ -104,3 +104,68 @@ export function renderComment(data: CommentData): string {
 
   return lines.join('\n');
 }
+
+import * as github from '@actions/github';
+
+export interface IssueComment {
+  id: number;
+  body?: string;
+}
+
+export interface CommentsClient {
+  list(params: { owner: string; repo: string; issue_number: number }): Promise<IssueComment[]>;
+  create(params: { owner: string; repo: string; issue_number: number; body: string }): Promise<unknown>;
+  update(params: {
+    owner: string;
+    repo: string;
+    comment_id: number;
+    body: string;
+  }): Promise<unknown>;
+}
+
+export async function upsertComment(
+  client: CommentsClient,
+  owner: string,
+  repo: string,
+  pr: number,
+  body: string,
+): Promise<'created' | 'updated'> {
+  const comments = await client.list({ owner, repo, issue_number: pr });
+  const existing = comments.find((c) => (c.body ?? '').includes(MARKER));
+  if (existing === undefined) {
+    await client.create({ owner, repo, issue_number: pr, body });
+    return 'created';
+  }
+  await client.update({ owner, repo, comment_id: existing.id, body });
+  return 'updated';
+}
+
+export async function postComment(args: {
+  owner: string;
+  repo: string;
+  pr: number;
+  body: string;
+  token: string;
+}): Promise<'created' | 'updated'> {
+  if (args.token === '') {
+    throw new Error('GITHUB_TOKEN is required to post the PR comment.');
+  }
+  const octokit = github.getOctokit(args.token);
+  return upsertComment(
+    {
+      list: (params) =>
+        octokit.paginate(octokit.rest.issues.listComments, {
+          owner: params.owner,
+          repo: params.repo,
+          issue_number: params.issue_number,
+          per_page: 100,
+        }),
+      create: (params) => octokit.rest.issues.createComment(params),
+      update: (params) => octokit.rest.issues.updateComment(params),
+    },
+    args.owner,
+    args.repo,
+    args.pr,
+    args.body,
+  );
+}

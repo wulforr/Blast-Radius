@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { MARKER, renderComment, type CommentData } from './comment.js';
+import { MARKER, renderComment, upsertComment, postComment, MARKER as MARKER2, type CommentData, type CommentsClient } from './comment.js';
 
 function base(overrides: Partial<CommentData> = {}): CommentData {
   return {
@@ -73,5 +73,52 @@ describe('renderComment', () => {
     expect(body).toContain('a.ts (depth 1)');
     expect(body).not.toContain('b.ts (depth 9)');
     expect(body).toContain('…and 1 more below depth 3');
+  });
+});
+
+function stub(existing: Array<{ id: number; body?: string }> = []) {
+  const calls: Array<{ kind: 'list' | 'create' | 'update'; body?: string; id?: number }> = [];
+  const client: CommentsClient = {
+    list: async () => {
+      calls.push({ kind: 'list' });
+      return existing;
+    },
+    create: async (params) => {
+      calls.push({ kind: 'create', body: params.body });
+      return {};
+    },
+    update: async (params) => {
+      calls.push({ kind: 'update', body: params.body, id: params.comment_id });
+      return {};
+    },
+  };
+  return { client, calls };
+}
+
+describe('upsertComment', () => {
+  test('creates when no marked comment exists', async () => {
+    const { client, calls } = stub([{ id: 1, body: 'hello' }]);
+    await expect(upsertComment(client, 'o', 'r', 7, `${MARKER2}\nbody`)).resolves.toBe('created');
+    expect(calls.map((c) => c.kind)).toEqual(['list', 'create']);
+  });
+
+  test('updates the marked comment in place, never a second one', async () => {
+    const { client, calls } = stub([
+      { id: 1, body: 'hello' },
+      { id: 2, body: `${MARKER2}\nold` },
+    ]);
+    await expect(upsertComment(client, 'o', 'r', 7, `${MARKER2}\nnew`)).resolves.toBe('updated');
+    expect(calls).toEqual([
+      { kind: 'list' },
+      { kind: 'update', body: `${MARKER2}\nnew`, id: 2 },
+    ]);
+  });
+});
+
+describe('postComment', () => {
+  test('an empty token throws before any network', async () => {
+    await expect(postComment({ owner: 'o', repo: 'r', pr: 7, body: 'x', token: '' })).rejects.toThrow(
+      /GITHUB_TOKEN/,
+    );
   });
 });
