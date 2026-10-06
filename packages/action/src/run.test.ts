@@ -31,6 +31,7 @@ describe('run', () => {
       roots: ['.'],
       changed: ['src/util/round.ts'],
       analyzerDir: PKG,
+      maxDepth: 3,
     });
     expect(resultPath).toBe(path.join(workspace, 'blast-radius.json'));
     expect(result.reached.find((r) => r.path === 'src/index.ts')?.depth).toBe(3);
@@ -40,7 +41,7 @@ describe('run', () => {
 
   test('an empty repo writes a valid empty result, not an error', async () => {
     fs.rmSync(path.join(workspace, 'src'), { recursive: true, force: true });
-    const { result } = await run({ workspace, roots: ['.'], changed: [], analyzerDir: PKG });
+    const { result } = await run({ workspace, roots: ['.'], changed: [], analyzerDir: PKG, maxDepth: 3 });
     expect(result.reached).toEqual([]);
     expect(result.stats.files).toBe(0);
   });

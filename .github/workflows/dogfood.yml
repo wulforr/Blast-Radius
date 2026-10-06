@@ -3,11 +3,12 @@ name: blast-radius (self)
 on:
   pull_request:
 
-# Read-only self-test: listing PR files needs pull-requests: read.
-# (The M6 comment will need write; that scope arrives with the comment.)
+# Self-test: listing PR files needs pull-requests: read, and the sticky
+# comment needs pull-requests: write. The write scope posts the comment and
+# nothing else.
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
 
 jobs:
   analyze:
@@ -34,3 +35,10 @@ jobs:
           test -f blast-radius.json
           jq -e '.stats.files > 0' blast-radius.json
           jq -e '.reached | type == "array"' blast-radius.json
+
+      - name: Assert sticky comment
+        run: |
+          count=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" --jq '[.[] | select(.body | contains("<!-- blast-radius -->"))] | length')
+          test "$count" = 1
+        env:
+          GH_TOKEN: ${{ github.token }}
