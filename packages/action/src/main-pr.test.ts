@@ -5,6 +5,8 @@ import * as path from 'node:path';
 
 const EVENT = path.join(os.tmpdir(), `blast-event-${process.pid}.json`);
 
+let exitCode: number | undefined;
+
 function setEvent(payload: unknown): void {
   fs.writeFileSync(EVENT, JSON.stringify(payload));
   process.env['GITHUB_EVENT_PATH'] = EVENT;
@@ -12,12 +14,15 @@ function setEvent(payload: unknown): void {
 }
 
 beforeEach(() => {
+  exitCode = typeof process.exitCode === 'number' ? process.exitCode : undefined;
   delete process.env['INPUT_COMMENT'];
   delete process.env['INPUT_PATHS'];
+  delete process.env['INPUT_FAIL-ON-UNTESTED'];
   delete process.env['GITHUB_TOKEN'];
 });
 
 afterEach(() => {
+  process.exitCode = exitCode;
   delete process.env['GITHUB_EVENT_PATH'];
   delete process.env['GITHUB_REPOSITORY'];
   delete process.env['GITHUB_TOKEN'];
@@ -41,7 +46,7 @@ describe('main on PR events', () => {
     const seen: Array<{ body: string; pr: number }> = [];
     const lister = (_token: string) => async () => [{ filename: 'src/a.ts', status: 'modified' }];
     await main(
-      async () => ({ body: '<!-- blast-radius -->\ntest' }),
+      async () => ({ body: '<!-- blast-radius -->\ntest', untested: [] }),
       async (args) => {
         seen.push({ body: args.body, pr: args.pr });
         return 'created';
@@ -56,7 +61,7 @@ describe('main on PR events', () => {
   test('a missing token on a PR warns and exits zero, never 401', async () => {
     setEvent({ pull_request: { number: 7 } });
     const { main } = await freshMain();
-    await main(async () => ({ body: '' }));
+    await main(async () => ({ body: '', untested: [] }));
     expect(process.exitCode ?? 0).toBe(0);
   });
 
@@ -71,7 +76,7 @@ describe('main on PR events', () => {
     await main(
       async (options) => {
         execSeen = options;
-        return { body: 'x' };
+        return { body: 'x', untested: [] };
       },
       async () => {
         called += 1;
@@ -81,5 +86,58 @@ describe('main on PR events', () => {
     );
     expect(called).toBe(0);
     expect(execSeen).toMatchObject({ changed: ['src/a.ts'] });
+  });
+
+  test('fail-on-untested exits non-zero with untested modules, after posting', async () => {
+    setEvent({ pull_request: { number: 7 } });
+    process.env['GITHUB_TOKEN'] = 'token';
+    process.env['INPUT_FAIL-ON-UNTESTED'] = 'true';
+    const { main } = await freshMain();
+    const posted: string[] = [];
+    const lister = (_token: string) => async () => [{ filename: 'src/a.ts', status: 'modified' }];
+    await main(
+      async () => ({ body: 'x', untested: ['src/a.ts'] }),
+      async (args) => {
+        posted.push(args.body);
+        return 'created';
+      },
+      lister,
+    );
+    expect(posted.length).toBe(1);
+    expect(process.exitCode).toBe(1);
+  });
+
+  test('fail-on-untested passes clean when nothing is untested', async () => {
+    setEvent({ pull_request: { number: 7 } });
+    process.env['GITHUB_TOKEN'] = 'token';
+    process.env['INPUT_FAIL-ON-UNTESTED'] = 'true';
+    const { main } = await freshMain();
+    const lister = (_token: string) => async () => [{ filename: 'src/a.ts', status: 'modified' }];
+    await main(
+      async () => ({ body: 'x', untested: [] }),
+      async () => 'created',
+      lister,
+    );
+    expect(process.exitCode ?? 0).toBe(0);
+  });
+
+  test('fail-on-untested with comment:false exits non-zero without posting', async () => {
+    setEvent({ pull_request: { number: 7 } });
+    process.env['GITHUB_TOKEN'] = 'token';
+    process.env['INPUT_COMMENT'] = 'false';
+    process.env['INPUT_FAIL-ON-UNTESTED'] = 'true';
+    const { main } = await freshMain();
+    let called = 0;
+    const lister = (_token: string) => async () => [{ filename: 'src/a.ts', status: 'modified' }];
+    await main(
+      async () => ({ body: 'x', untested: ['src/a.ts'] }),
+      async () => {
+        called += 1;
+        return 'created';
+      },
+      lister,
+    );
+    expect(called).toBe(0);
+    expect(process.exitCode).toBe(1);
   });
 });

@@ -39,7 +39,7 @@ describe('main', () => {
     let seen: unknown;
     await main(async (options) => {
       seen = options;
-      return { body: '' };
+      return { body: '', untested: [] };
     });
     expect(seen).toMatchObject({ changed: [] });
     delete process.env['GITHUB_WORKSPACE'];
@@ -51,7 +51,7 @@ describe('main', () => {
     // github.context.payload has no pull_request outside the runner, so this
     // follows the empty-changed path; the token-missing branch is covered by
     // the dogfood workflow on a real PR.
-    await main(async () => ({ body: '' }));
+    await main(async () => ({ body: '', untested: [] }));
     expect(process.exitCode).toBeUndefined();
   });
 });

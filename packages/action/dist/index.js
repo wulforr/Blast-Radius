@@ -30362,7 +30362,7 @@ function renderComment(data) {
     const hidden = reached.length - Math.min(inScope.length, MAX_LIST_LINES);
     const deeper = reached.filter((r) => r.depth > data.maxDepth).length;
     if (deeper > 0) {
-        treeLines.push(`   …and ${deeper} more below depth ${data.maxDepth}`);
+        treeLines.push(`   …and ${hidden} more (${deeper} below depth ${data.maxDepth})`);
     }
     else if (hidden > 0) {
         treeLines.push(`   …and ${hidden} more`);
@@ -30566,8 +30566,8 @@ function defaultLister(token) {
 /**
  * Failure-proof entry point. *Every* error — no token, API outage, unreadable
  * checkout, wasm failure — becomes a warning and exit zero. Hard constraint:
- * this Action must never fail someone's CI. (The sole future exception is
- * `fail-on-untested`, enforced from M7.)
+ * this Action must never fail someone's CI. (The sole exception is
+ * `fail-on-untested`, enforced below after posting.)
  */
 async function main(exec = run_js_1.run, poster = comment_js_1.postComment, lister = defaultLister) {
     try {
@@ -30612,19 +30612,25 @@ async function execute(exec, poster, lister) {
     });
     if (!inputs.comment) {
         core.info('Comment posting is disabled (comment: false); skipping.');
-        return;
     }
-    if (target === null) {
+    else if (target === null) {
         core.info('No pull_request in the event payload; skipping comment.');
-        return;
     }
-    await poster({
-        owner: target.owner,
-        repo: target.repo,
-        pr: target.pr,
-        body: out.body,
-        token: process.env['GITHUB_TOKEN'] ?? '',
-    });
+    else {
+        await poster({
+            owner: target.owner,
+            repo: target.repo,
+            pr: target.pr,
+            body: out.body,
+            token: process.env['GITHUB_TOKEN'] ?? '',
+        });
+    }
+    // Evaluated regardless of the comment gate: with `comment: false` the
+    // exit code is the only failure signal.
+    if (inputs.failOnUntested && out.untested.length > 0) {
+        const n = out.untested.length;
+        core.setFailed(`Blast Radius: ${n} reached ${n === 1 ? 'module has' : 'modules have'} no test coverage (fail-on-untested).`);
+    }
 }
 if ( true && require.main === require.cache[eval('__filename')]) {
     void main();
@@ -30680,15 +30686,17 @@ const analyzer_js_1 = __nccwpck_require__(4177);
 const classify_js_1 = __nccwpck_require__(6005);
 const collect_js_1 = __nccwpck_require__(8501);
 const comment_js_1 = __nccwpck_require__(4278);
+const untested_js_1 = __nccwpck_require__(7393);
 async function run(options) {
     const files = (0, collect_js_1.collectFiles)(options.workspace, options.roots);
     const result = (0, analyzer_js_1.analyzeTree)(options.analyzerDir, files, options.changed);
     const classification = (0, classify_js_1.classify)(result.reached, files);
+    const untested = (0, untested_js_1.findUntested)(result.reached, result.edges);
     const body = (0, comment_js_1.renderComment)({
         changedCount: options.changed.length,
         reached: result.reached,
         classification,
-        untested: [],
+        untested,
         stats: result.stats,
         unresolved: result.unresolved,
         maxDepth: options.maxDepth,
@@ -30698,7 +30706,67 @@ async function run(options) {
     core.setOutput('result-path', resultPath);
     core.info(`Blast radius: ${result.reached.length} modules reached, ` +
         `${result.stats.unresolved} unresolved, ${result.stats.dynamicGaps} dynamic gaps.`);
-    return { result, resultPath, classification, body };
+    return { result, resultPath, classification, body, untested };
+}
+
+
+/***/ }),
+
+/***/ 7393:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.findUntested = findUntested;
+const classify_js_1 = __nccwpck_require__(6005);
+/**
+ * Reached modules with no test coverage: a module counts as covered when a
+ * test file appears anywhere in its own reverse-reachable set (modules that
+ * transitively import it — i.e. anything that would exercise it). Spec §4.
+ *
+ * Soundness note: any test covering a reached module is itself reached (a
+ * test importing M, where M transitively imports changed code, transitively
+ * imports that changed code too), so walking the full edge set is exact, not
+ * an approximation. The reverse map is built once; each walk is iterative
+ * with a visited set, so import cycles terminate.
+ */
+function findUntested(reached, edges) {
+    const importers = new Map();
+    for (const [from, to] of edges) {
+        let set = importers.get(to);
+        if (set === undefined) {
+            set = new Set();
+            importers.set(to, set);
+        }
+        set.add(from);
+    }
+    const untested = [];
+    for (const { path } of reached) {
+        if (!hasCoveringTest(path, importers)) {
+            untested.push(path);
+        }
+    }
+    return untested.sort();
+}
+function hasCoveringTest(start, importers) {
+    const seen = new Set([start]);
+    const queue = [start];
+    while (queue.length > 0) {
+        const current = queue.pop();
+        if (current === undefined)
+            continue;
+        if ((0, classify_js_1.isTest)(current))
+            return true;
+        const next = importers.get(current) ?? [];
+        for (const importer of next) {
+            if (!seen.has(importer)) {
+                seen.add(importer);
+                queue.push(importer);
+            }
+        }
+    }
+    return false;
 }
 
 

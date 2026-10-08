@@ -15,10 +15,9 @@ explains why this is an Action rather than a GitHub App.
 
 ## Status
 
-Milestones M0–M6 are done: the Action classifies reached modules, renders the
-blast-radius comment, and maintains exactly one sticky comment per PR.
-Untested-path detection arrives with M7. See §10 of the spec for the
-milestone list.
+Milestones M0–M7 are done: the Action flags reached modules with no test
+coverage in the comment and can fail CI on them. The public gallery arrives
+with M9. See §10 of the spec for the milestone list.
 
 ## Layout
 
@@ -90,7 +89,8 @@ jobs:
 
 Analysis runs on your own runner; nothing leaves it in M5 (gallery opt-in
 arrives with M9). A failure anywhere in the Action warns and exits zero —
-it never fails your CI.
+it never fails your CI. Set `fail-on-untested: true` to fail the check when
+reached modules lack coverage; the comment is still posted first.
 
 ## Notable engineering decisions
 

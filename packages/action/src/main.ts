@@ -6,8 +6,8 @@ import { postComment } from './comment.js';
 import { run, type RunOptions } from './run.js';
 
 // Minimal structural type: the real `run` returns the full `RunResult`
-// (which carries `body`), and test stubs return just the body.
-type RunFn = (options: RunOptions) => Promise<{ body: string }>;
+// (which carries `body` and `untested`), and test stubs return just those.
+type RunFn = (options: RunOptions) => Promise<{ body: string; untested: string[] }>;
 
 type Poster = (args: {
   owner: string;
@@ -35,8 +35,8 @@ function defaultLister(token: string): ListFiles {
 /**
  * Failure-proof entry point. *Every* error — no token, API outage, unreadable
  * checkout, wasm failure — becomes a warning and exit zero. Hard constraint:
- * this Action must never fail someone's CI. (The sole future exception is
- * `fail-on-untested`, enforced from M7.)
+ * this Action must never fail someone's CI. (The sole exception is
+ * `fail-on-untested`, enforced below after posting.)
  */
 export async function main(
   exec: RunFn = run,
@@ -92,19 +92,26 @@ async function execute(exec: RunFn, poster: Poster, lister: Lister): Promise<voi
 
   if (!inputs.comment) {
     core.info('Comment posting is disabled (comment: false); skipping.');
-    return;
-  }
-  if (target === null) {
+  } else if (target === null) {
     core.info('No pull_request in the event payload; skipping comment.');
-    return;
+  } else {
+    await poster({
+      owner: target.owner,
+      repo: target.repo,
+      pr: target.pr,
+      body: out.body,
+      token: process.env['GITHUB_TOKEN'] ?? '',
+    });
   }
-  await poster({
-    owner: target.owner,
-    repo: target.repo,
-    pr: target.pr,
-    body: out.body,
-    token: process.env['GITHUB_TOKEN'] ?? '',
-  });
+
+  // Evaluated regardless of the comment gate: with `comment: false` the
+  // exit code is the only failure signal.
+  if (inputs.failOnUntested && out.untested.length > 0) {
+    const n = out.untested.length;
+    core.setFailed(
+      `Blast Radius: ${n} reached ${n === 1 ? 'module has' : 'modules have'} no test coverage (fail-on-untested).`,
+    );
+  }
 }
 
 if (typeof require !== 'undefined' && require.main === module) {
