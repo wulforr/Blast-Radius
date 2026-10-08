@@ -29973,7 +29973,8 @@ function isAnalyzeResult(value) {
         typeof v['stats'] === 'object' &&
         v['stats'] !== null &&
         Array.isArray(v['unresolved']) &&
-        Array.isArray(v['dynamicGaps']));
+        Array.isArray(v['dynamicGaps']) &&
+        Array.isArray(v['edges']));
 }
 /**
  * Load the wasm-pack glue by path, not by bundle. `analyzer.js` reads

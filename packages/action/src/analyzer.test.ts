@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { analyzeTree, loadAnalyzer } from './analyzer.js';
 
@@ -39,5 +41,25 @@ describe('analyzeTree', () => {
 
   test('surfaces wasm error objects as thrown Errors', () => {
     expect(() => analyzeTree(PKG, PLAIN, ['src/util/round.ts'].map(() => 42) as unknown as string[])).toThrow();
+  });
+
+  test('rejects a pre-edges analyzer shape instead of passing undefined on', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'blast-stale-glue-'));
+    try {
+      fs.writeFileSync(
+        path.join(dir, 'analyzer.js'),
+        `exports.analyzeJson = () => ${JSON.stringify(
+          JSON.stringify({
+            reached: [],
+            stats: { files: 0, edges: 0, unresolved: 0, dynamicGaps: 0, parseFailures: 0 },
+            unresolved: [],
+            dynamicGaps: [],
+          }),
+        )}\n`,
+      );
+      expect(() => analyzeTree(dir, {}, [])).toThrow(/unrecognised JSON shape/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

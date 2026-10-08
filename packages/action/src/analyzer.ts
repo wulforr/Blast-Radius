@@ -41,7 +41,8 @@ function isAnalyzeResult(value: unknown): value is AnalyzeResult {
     typeof v['stats'] === 'object' &&
     v['stats'] !== null &&
     Array.isArray(v['unresolved']) &&
-    Array.isArray(v['dynamicGaps'])
+    Array.isArray(v['dynamicGaps']) &&
+    Array.isArray(v['edges'])
   );
 }
 
